@@ -1,0 +1,138 @@
+- hosts: all
+
+  pre_tasks:
+    - name: Update apt cache
+      apt: update_cache=yes cache_valid_time=86400
+
+  roles:
+    - role: geerlingguy.docker
+      vars:
+        docker_install_compose: false
+
+  tasks:
+    - name: Install pip and setuptools
+      become: yes
+      apt:
+        name:
+          - python3-pip
+          - python-setuptools
+        state: present
+
+    - name: Remove old library docker-py with pip
+      become: yes
+      tags:
+        - preinstall
+      pip:
+        name:
+          - docker-py
+        state: absent
+
+    - name: Install new library docker for Ansible-docker communication and jsondiff library
+      become: yes
+      tags:
+        - preinstall
+      pip:
+        name:
+          - docker
+          - jsondiff
+          - pyyaml
+        state: present
+
+    - name: "Add current user {{ ansible_user }} to group docker"
+      become: yes
+      user:
+        name: "{{ ansible_user }}"
+        comment: Swarm permissions
+        groups: docker
+        append: yes
+
+    - name: "Add group {{ swarm_user_group }} for users that are allowed to control swarm"
+      become: yes
+      group:
+        name: "{{ swarm_user_group }}"
+        state: present
+
+    - name: "Add current user {{ ansible_user }} to group {{ swarm_user_group }}"
+      become: yes
+      user:
+        name: "{{ ansible_user }}"
+        comment: Swarm permissions
+        groups: "{{ swarm_user_group }}"
+        append: yes
+
+    - name: "Create directory /opt/{{ opt_stack_directory }} to hold stack file"
+      become: yes
+      file:
+        path: "/opt/{{ opt_stack_directory }}"
+        state: directory
+        mode: "770"
+        owner: root
+        group: "{{ swarm_user_group }}"
+
+    - name: "Copy stack file {{ stack_file }} into /opt/{{ opt_stack_directory }}"
+      become: yes
+      tags:
+        - deploy
+      copy:
+        src: "{{ stack_file }}"
+        dest: "/opt/{{ opt_stack_directory }}/{{ stack_file }}"
+        mode: "640"
+        owner: root
+        group: "{{ swarm_user_group }}"
+
+    - name: "Initialize swarm on {{ ansible_default_ipv4.address }}"
+      docker_swarm:
+        state: present
+        advertise_addr: "{{ ansible_default_ipv4.address }}"
+
+    - name: Create secrets
+      tags:
+        - secrets
+      docker_secret:
+        name: "{{ item.key }}"
+        data: "{{ item.value | b64encode }}"
+        data_is_b64: true
+        state: present
+      with_dict: "{{ docker_secrets }}"
+
+    - name: "Log into docker registry {{ docker_registry_url }}"
+      tags:
+        - update
+      docker_login:
+        registry: "{{ docker_registry_url }}"
+        username: "{{ docker_registry_username }}"
+        password: "{{ docker_registry_password }}"
+
+    - name: "Deploy stack {{ stack_name }} from a compose file /opt/{{ opt_stack_directory }}/{{ stack_file }}"
+      tags:
+        - deploy
+      docker_stack:
+        state: present
+        name: "{{ stack_name }}"
+        compose:
+          - "/opt/{{ opt_stack_directory }}/{{ stack_file }}"
+        with_registry_auth: true
+
+    - name: "Log out of docker registry {{ docker_registry_url }}"
+      tags:
+        - update
+      docker_login:
+        registry: "{{ docker_registry_url }}"
+        state: absent
+
+    - name: "Remove stack {{ stack_name }}"
+      tags:
+        - remove
+        - never
+      docker_stack:
+        name: "{{ stack_name }}"
+        state: absent
+
+    - name: Remove secrets
+      tags:
+        - remove
+        - never
+      docker_secret:
+        name: "{{ item.key }}"
+        state: absent
+      with_dict: "{{ docker_secrets }}"

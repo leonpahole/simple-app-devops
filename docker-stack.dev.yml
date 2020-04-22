@@ -1,0 +1,70 @@
+# for locally testing out swarm
+version: "3.1"
+
+services:
+  proxy:
+    container_name: simple_prod_proxy
+    image: jwilder/nginx-proxy:latest
+    ports:
+      - "80:80"
+    volumes:
+      - /var/run/docker.sock:/tmp/docker.sock:ro
+
+  frontend:
+    container_name: simple_prod_frontend
+    image: leonpahole/simple-frontend-angular:latest
+    environment:
+      - VIRTUAL_HOST=simple.leonpahole.com.local
+      - VIRTUAL_PORT=80
+    depends_on:
+      - api
+
+  api:
+    container_name: simple_prod_api
+    image: leonpahole/simple-backend-nodejs:latest
+    depends_on:
+      - db
+    environment:
+      - NODE_ENV=production
+      - DB_NAME=simple
+      - DB_USERNAME_FILE=/run/secrets/db_username
+      - DB_PASSWORD_FILE=/run/secrets/db_password
+      - DB_HOST=db
+      - VIRTUAL_HOST=api.simple.leonpahole.com.local
+      - VIRTUAL_PORT=3000
+    secrets:
+      - db_username
+      - db_password
+
+  db:
+    container_name: simple_prod_db
+    image: postgres:12
+    volumes:
+      - dbdata:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_DB=simple
+      - POSTGRES_USER_FILE=/run/secrets/db_username
+      - POSTGRES_PASSWORD_FILE=/run/secrets/db_password
+    secrets:
+      - db_username
+      - db_password
+
+  dbadm:
+    container_name: simple_prod_db_admin
+    image: adminer
+    depends_on:
+      - db
+    ports:
+      - 8080:8080
+    environment:
+      - VIRTUAL_HOST=db.simple.leonpahole.com.local
+      - VIRTUAL_PORT=8080
+
+volumes:
+  dbdata:
+
+secrets:
+  db_username:
+    file: ./dev_secrets/db_username.txt
+  db_password:
+    file: ./dev_secrets/db_password.txt

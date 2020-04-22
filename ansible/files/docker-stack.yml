@@ -1,0 +1,101 @@
+version: "3.1"
+
+services:
+  proxy:
+    image: jwilder/nginx-proxy:latest
+    labels:
+      com.github.jrcs.letsencrypt_nginx_proxy_companion.nginx_proxy: "true"
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - conf:/etc/nginx/conf.d
+      - vhost:/etc/nginx/vhost.d
+      - html:/usr/share/nginx/html
+      - dhparam:/etc/nginx/dhparam
+      - certs:/etc/nginx/certs:ro
+      - /var/run/docker.sock:/tmp/docker.sock:ro
+
+  letsencrypt:
+    image: jrcs/letsencrypt-nginx-proxy-companion
+    volumes:
+      - conf:/etc/nginx/conf.d
+      - vhost:/etc/nginx/vhost.d
+      - html:/usr/share/nginx/html
+      - dhparam:/etc/nginx/dhparam
+      - certs:/etc/nginx/certs:rw
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      - DEFAULT_EMAIL=leonnieen@gmail.com
+
+  frontend:
+    image: leonpahole/simple-frontend-angular:0.0.3
+    environment:
+      - VIRTUAL_HOST=simple.leonpahole.com
+      - LETSENCRYPT_HOST=simple.leonpahole.com
+      - VIRUTAL_PORT=80
+    depends_on:
+      - api
+      - proxy
+      - letsencrypt
+
+  api:
+    image: leonpahole/simple-backend-nodejs:0.0.3
+    depends_on:
+      - db
+      - proxy
+      - letsencrypt
+    environment:
+      - NODE_ENV=production
+      - DB_NAME=simple
+      - DB_USERNAME_FILE=/run/secrets/db_username
+      - DB_PASSWORD_FILE=/run/secrets/db_password
+      - DB_HOST=db
+      - VIRTUAL_HOST=api.simple.leonpahole.com
+      - LETSENCRYPT_HOST=api.simple.leonpahole.com
+      - VIRTUAL_PORT=3000
+    secrets:
+      - db_username
+      - db_password
+
+  db:
+    image: postgres:12
+    depends_on:
+      - proxy
+      - letsencrypt
+    volumes:
+      - dbdata:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_DB=simple
+      - POSTGRES_USER_FILE=/run/secrets/db_username
+      - POSTGRES_PASSWORD_FILE=/run/secrets/db_password
+    secrets:
+      - db_username
+      - db_password
+
+  adminer:
+    image: adminer
+    depends_on:
+      - db
+      - proxy
+      - letsencrypt
+    ports:
+      - 8080:8080
+    environment:
+      - VIRTUAL_HOST=db.simple.leonpahole.com
+      - LETSENCRYPT_HOST=db.simple.leonpahole.com
+      - VIRTUAL_PORT=8080
+
+volumes:
+  dbdata:
+  conf:
+  vhost:
+  html:
+  dhparam:
+  certs:
+
+secrets:
+  db_username:
+    external: true
+  db_password:
+    external: true
