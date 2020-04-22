@@ -1,2 +1,2 @@
-ansible/group_vars/all.yml
+ansible/vars/secret_vars.yml
 ansible/production

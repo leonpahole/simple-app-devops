@@ -79,8 +79,6 @@ services:
       - db
       - proxy
       - letsencrypt
-    ports:
-      - 8080:8080
     environment:
       - VIRTUAL_HOST=db.simple.leonpahole.com
       - LETSENCRYPT_HOST=db.simple.leonpahole.com

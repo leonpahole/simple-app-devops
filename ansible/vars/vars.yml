@@ -1,0 +1,5 @@
+swarm_user_group: swarm
+opt_stack_directory: simple
+stack_file: docker-stack.yml
+
+stack_name: simple

@@ -1,5 +1,12 @@
 - hosts: all
 
+  vars_files:
+    - vars/vars.yml
+    - vars/secret_vars.yml
+
+  vars:
+    login_to_registry: "{{ docker_registry_username is defined and docker_registry_password is defined }}"
+
   pre_tasks:
     - name: Update apt cache
       apt: update_cache=yes cache_valid_time=86400
@@ -102,6 +109,7 @@
         registry: "{{ docker_registry_url }}"
         username: "{{ docker_registry_username }}"
         password: "{{ docker_registry_password }}"
+      when: login_to_registry
 
     - name: "Deploy stack {{ stack_name }} from a compose file /opt/{{ opt_stack_directory }}/{{ stack_file }}"
       tags:
@@ -119,6 +127,7 @@
       docker_login:
         registry: "{{ docker_registry_url }}"
         state: absent
+      when: login_to_registry
 
     - name: "Remove stack {{ stack_name }}"
       tags:
